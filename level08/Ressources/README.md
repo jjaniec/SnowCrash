@@ -53,7 +53,7 @@ quif5eloekouj29ke0vouxean
 
           10.12.1.143
 
-flag08@10.12.1.143's password:
+flag08@10.12.1.143's password: <<< 'quif5eloekouj29ke0vouxean'
 Don't forget to launch getflag !
 
 flag08@SnowCrash:~$ getflag

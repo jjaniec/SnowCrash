@@ -65,7 +65,7 @@ Login incorrect^M$
 https://www.asciitable.com/
 
 ```bash
-cat data  | tr -d '\n' | cut -c825-900 | xxd -r -p | cat -e                                                                              
+cat data  | tr -d '\n' | cut -c825-900 | xxd -r -p | cat -e
 ft_wandr^?^?^?NDRel^?L0L^M^@^M$
 ^A^@^M$
 Login inco

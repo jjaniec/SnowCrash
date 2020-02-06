@@ -24,7 +24,7 @@ https://null-byte.wonderhowto.com/how-to/crack-shadow-hashes-after-getting-root-
 
 - Fire up a virtual machine to install John The ripper
 
-[![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://ssh.cloud.google.com/cloudshell/editor?cloudshell_git_repo=http://path-to-repo/sample.git)
+[![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://ssh.cloud.google.com/cloudshell/editor?cloudshell_git_repo=http://github.com/jjaniec/snowcrash)
 
 ```bash
 sudo apt-get update
@@ -42,7 +42,7 @@ Press 'q' or Ctrl-C to abort, almost any other key for status
 abcdefg          (flag01)
 1g 0:00:00:00 100% 2/3 14.28g/s 19900p/s 19900c/s 19900C/s raquel..bigman 
 Use the "--show" option to display all of the cracked passwords reliably
-Session completed         
+Session completed
 ```
 
 ### Login to level02
